@@ -2141,6 +2141,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
           parseToken(FIRToken::r_paren, "expected ')' in reset specifier") ||
           parseOptionalInfo(info, subOps))
         return failure();
+      resetValue = convertToPassive(resetValue, resetValue.getLoc());
     }
 
     if (hasExtraLParen &&
