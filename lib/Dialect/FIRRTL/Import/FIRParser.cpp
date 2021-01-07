@@ -2001,7 +2001,8 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
 /// node ::= 'node' id '=' exp info?
 ParseResult FIRStmtParser::parseNode() {
-  LocWithInfo info(getToken().getLoc(), this);
+  auto loc = getToken().getLoc();
+  LocWithInfo info(loc, this);
   consumeToken(FIRToken::kw_node);
 
   // If this was actually the start of a connect or something else handle
@@ -2017,6 +2018,25 @@ ParseResult FIRStmtParser::parseNode() {
       parseExp(initializer, subOps, "expected expression for node") ||
       parseOptionalInfo(info, subOps))
     return failure();
+
+  // Error out if the node type, with an optional outer flip stripped,
+  // is not passive. Note: this is less restrictive than the FIRRTL
+  // spec to accomodate for situations where the node is something
+  // weird like a module output or an instance input.
+  auto initializerType = initializer.getType().cast<FIRRTLType>();
+  auto underlyingType = initializerType;
+  auto flip = initializerType.dyn_cast_or_null<FlipType>();
+  if (flip)
+    underlyingType = flip.getElementType();
+  if (!underlyingType.isPassive()) {
+    emitError(loc, "Node must be a passive type or a passive type under an "
+                   "outer flip, but got ")
+        << initializer.getType();
+    return failure();
+  }
+
+  // If the node type isn't passive, then make it passive.
+  initializer = convertToPassive(initializer, initializer.getLoc());
 
   // Ignore useless names like _T.
   auto actualName = filterUselessName(id);

@@ -134,3 +134,13 @@ circuit test :
    input in1 : SInt
    input in2 : UInt
    node n = add(in1, in2)  ; expected-error {{operand signedness must match}}
+
+;// -----
+
+circuit test :
+  module invalid_node :
+    input a : { a: UInt, flip b: UInt}
+    output b : { a: UInt, flip b: UInt}
+    ; expected-error @+1 {{Node must be a passive type}}
+    node n = a
+    b <= n
