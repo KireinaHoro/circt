@@ -1,10 +1,11 @@
-; RUN: circt-translate -parse-fir -verify-diagnostics --split-input-file %s 
+; RUN: circt-translate -parse-fir -verify-diagnostics --split-input-file %s
 
 circuit test :
   extmodule MyModule :
 
     ; expected-error @+1 {{unterminated string}}
     parameter FORMAT = "tilelink_timeou
+    : COM: "
 
 ;// -----
 
@@ -102,7 +103,7 @@ circuit test :
 
     ; expected-error @+1 {{use of undefined module name 'some_module' in instance}}
     inst xyz of some_module
- 
+
 ;// -----
 
 circuit test :

@@ -327,6 +327,7 @@ public:
   LogicalResult visitSV(InterfaceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
+  LogicalResult visitSV(AssignInterfaceSignalOp op);
   void emitOperation(Operation *op);
 
   void collectNamesEmitDecls(Block &block);
@@ -636,12 +637,14 @@ private:
   }
 
   SubExprInfo visitSV(GetModportOp op);
+  SubExprInfo visitSV(ReadInterfaceSignalOp op);
   SubExprInfo visitSV(TextualValueOp op);
 
   // Noop cast operators.
   SubExprInfo visitComb(ReadInOutOp op) { return emitNoopCast(op); }
 
   // Other
+  SubExprInfo visitComb(ArraySliceOp op);
   SubExprInfo visitComb(ArrayIndexOp op);
   SubExprInfo visitComb(MuxOp op);
 
@@ -942,6 +945,11 @@ SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
   return {Unary, IsUnsigned};
 }
 
+SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
+  os << emitter.getName(op.iface()) + "." + op.signalName();
+  return {Unary, IsUnsigned};
+}
+
 SubExprInfo ExprEmitter::visitSV(TextualValueOp op) {
   os << op.string();
   return {Unary, IsUnsigned};
@@ -974,6 +982,18 @@ SubExprInfo ExprEmitter::visitComb(ConstantOp op) {
   }
   os << valueStr;
   return {Unary, signPreference == RequireSigned ? IsSigned : IsUnsigned};
+}
+
+// 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
+// for slicing operations.
+SubExprInfo ExprEmitter::visitComb(ArraySliceOp op) {
+  auto arrayPrec = emitSubExpr(op.input(), Symbol);
+
+  unsigned dstWidth = op.getType().cast<ArrayType>().getSize();
+  os << '[';
+  emitSubExpr(op.lowIndex(), LowestPrecedence);
+  os << "+:" << dstWidth << ']';
+  return {Unary, arrayPrec.signedness};
 }
 
 SubExprInfo ExprEmitter::visitComb(ArrayIndexOp op) {
@@ -1361,7 +1381,11 @@ LogicalResult ModuleEmitter::visitSV(IfOp op) {
   ops.insert(op);
 
   indent() << "if (" << emitExpressionToString(op.cond(), ops) << ')';
-  emitBeginEndRegion(op.getBodyBlock(), ops, *this);
+  emitBeginEndRegion(op.getThenBlock(), ops, *this);
+  if (op.hasElse()) {
+    indent() << "else";
+    emitBeginEndRegion(op.getElseBlock(), ops, *this);
+  }
   return success();
 }
 
@@ -1532,6 +1556,15 @@ LogicalResult ModuleEmitter::visitSV(InterfaceModportOp op) {
   return success();
 }
 
+LogicalResult ModuleEmitter::visitSV(AssignInterfaceSignalOp op) {
+  SmallPtrSet<Operation *, 8> emitted;
+  indent() << "assign ";
+  emitExpression(op.iface(), emitted, /*forceRootExpr=*/true);
+  os << "." << op.signalName() << " = ";
+  emitExpression(op.rhs(), emitted, /*forceRootExpr=*/true);
+  os << ";\n";
+  return success();
+}
 //===----------------------------------------------------------------------===//
 // Module Driver
 //===----------------------------------------------------------------------===//
@@ -1570,6 +1603,10 @@ static bool isExpressionUnableToInline(Operation *op) {
           !isOkToBitSelectFrom(op->getResult(0)))
         return true;
     }
+    // ArraySliceOp uses its operand twice, so we want to assign it first then
+    // use that variable in the ArraySliceOp expression.
+    if (isa<ArraySliceOp>(user))
+      return true;
   }
   return false;
 }
@@ -1580,7 +1617,7 @@ static bool isExpressionAlwaysInline(Operation *op) {
     return true;
 
   // An SV interface modport is a symbolic name that is always inlined.
-  if (isa<GetModportOp>(op))
+  if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
     return true;
 
   // If this is a noop cast and the operand is always inlined, then the noop
