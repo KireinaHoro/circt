@@ -22,6 +22,7 @@ target_link_libraries(circt-opt
   CIRCTRTLToLLHD
   CIRCTStandardToHandshake
   CIRCTStandardToStaticLogic
+  CIRCTLLVMToStandard
   CIRCTStaticLogicOps
   CIRCTSV
 

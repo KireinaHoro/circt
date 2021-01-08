@@ -1402,6 +1402,28 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
   }
 };
 
+void removeRedundantControlMerge(handshake::FuncOp f, ConversionPatternRewriter &rewriter){
+  for(Block &block : f){
+    for(Operation &op : block){
+      if(isa<ControlMergeOp>(op) && op.getNumOperands() == 1){
+        //fprintf(stderr,"Found\n");
+        rewriter.setInsertionPointAfter(&op);
+        Operation* newOp = rewriter.create<handshake::ForkOp>(op.getLoc(),op.getOperand(0),1);
+        op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
+        for(Operation &opp :block)
+          if(isa<SinkOp>(opp) && opp.getOperand(0) == op.getResult(1)){
+            //fprintf(stderr,"Sink found\n");
+            opp.eraseOperand(0);
+            rewriter.eraseOp(&opp);
+          }
+        op.eraseOperand(0);
+        rewriter.eraseOp(&op);
+      }
+    }
+  }
+  //fprintf(stderr,"Done\n");
+}
+
 struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
   using OpConversionPattern<mlir::FuncOp>::OpConversionPattern;
   LogicalResult match(Operation *op) const override { return success(); }
@@ -1474,6 +1496,8 @@ struct FuncOpLowering : public OpConversionPattern<mlir::FuncOp> {
     bool lsq = false;
     connectToMemory(newFuncOp, MemOps, lsq, rewriter);
 
+    //removeRedundantControlMerge(newFuncOp, rewriter);
+    
     // Apply signature conversion to set function arguments
     rewriter.applySignatureConversion(&newFuncOp.getBody(), result);
 

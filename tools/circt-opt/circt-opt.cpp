@@ -18,6 +18,7 @@
 #include "circt/Conversion/RTLToLLHD/RTLToLLHD.h"
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
 #include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"
+#include "circt/Conversion/LLVMToStandard/LLVMToStandard.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -40,6 +41,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"
+
 
 using namespace llvm;
 using namespace mlir;
@@ -110,6 +112,8 @@ int main(int argc, char **argv) {
   staticlogic::registerStandardToStaticLogicPasses();
   handshake::registerStandardToHandshakePasses();
   handshake::registerHandshakeToFIRRTLPasses();
+
+  LLVM::registerLLVMToStandardPasses();
 
   registry.insert<esi::ESIDialect>();
   esi::registerESIPasses();
